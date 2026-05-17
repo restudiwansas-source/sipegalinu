@@ -19,7 +19,7 @@ export default function TabBar() {
     .sort((a,b) => Number(a.order_no || 0) - Number(b.order_no || 0));
 
   return (
-    <nav className="tabbar">
+    <nav className="tabbar safe-bottom">
       {visibleMenus.map((m) => {
         const Icon = iconMap[m.icon] || Home;
         return (
