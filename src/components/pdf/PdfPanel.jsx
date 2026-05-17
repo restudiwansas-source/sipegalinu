@@ -2,10 +2,13 @@ import { useState } from "react";
 import { FileText, Globe, Maximize2, X } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
 import HtmlMapViewer from "../map/HtmlMapViewer";
+import ProtectedPdfViewer from "./ProtectedPdfViewer";
 
 export default function PdfPanel() {
   const { blocks, selectedBlock, setSelectedBlock, setActiveTab } = useAppStore();
-  const [fullscreen, setFullscreen] = useState(false);
+
+  const [fullscreenHtml, setFullscreenHtml] = useState(false);
+  const [fullscreenPdf, setFullscreenPdf] = useState(false);
 
   const block = selectedBlock || blocks?.[0];
 
@@ -63,7 +66,10 @@ export default function PdfPanel() {
             <Meta label="Nomor Blok" value={block.kode_blok} />
             <Meta label="Jumlah Objek" value={`${block.jumlah_objek || 0} unit`} />
             <Meta label="Luas Area" value={block.luas || "-"} />
-            <Meta label="Status" value={block.interactive_map ? "HTML tersedia" : "Belum upload"} />
+            <Meta
+              label="Status"
+              value={block.interactive_map ? "HTML tersedia" : "Belum upload"}
+            />
           </div>
 
           <div className="p-4 flex gap-3">
@@ -76,7 +82,7 @@ export default function PdfPanel() {
 
             {block.interactive_map && (
               <button
-                onClick={() => setFullscreen(true)}
+                onClick={() => setFullscreenHtml(true)}
                 className="flex-1 bg-[var(--gold)] text-[var(--green-deep)] rounded-xl p-3 font-black flex items-center justify-center gap-2"
               >
                 <Maximize2 size={18} />
@@ -98,7 +104,7 @@ export default function PdfPanel() {
 
             {block.interactive_map && (
               <button
-                onClick={() => setFullscreen(true)}
+                onClick={() => setFullscreenHtml(true)}
                 className="px-3 py-2 rounded-xl bg-[var(--green-mid)] text-white text-xs font-black flex items-center gap-2"
               >
                 <Maximize2 size={15} />
@@ -119,31 +125,43 @@ export default function PdfPanel() {
         </div>
 
         <div className="bg-white rounded-[24px] shadow-md overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-4 border-b border-[var(--cream-dark)]">
-            <FileText size={20} className="text-red-500" />
+          <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-[var(--cream-dark)]">
+            <div className="flex items-center gap-2">
+              <FileText size={20} className="text-red-500" />
 
-            <h3 className="text-lg font-black text-[var(--text-dark)]">
-              PDF Offline
-            </h3>
+              <h3 className="text-lg font-black text-[var(--text-dark)]">
+                PDF Offline
+              </h3>
+            </div>
+
+            {block.offline_pdf && (
+              <button
+                onClick={() => setFullscreenPdf(true)}
+                className="px-3 py-2 rounded-xl bg-red-500 text-white text-xs font-black flex items-center gap-2"
+              >
+                <Maximize2 size={15} />
+                Fullscreen
+              </button>
+            )}
           </div>
 
           {block.offline_pdf ? (
-            <div className="p-4">
-              <iframe
-                src={block.offline_pdf}
-                title="PDF Offline"
-                className="w-full h-[760px] rounded-xl border-0 bg-white"
-              />
-
-              <a
-                href={block.offline_pdf}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-4 w-full flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 transition-all text-white font-bold py-3 rounded-xl"
+            <div className="m-4">
+              <button
+                onClick={() => setFullscreenPdf(true)}
+                className="mb-3 w-full bg-red-500 hover:bg-red-600 text-white rounded-xl p-3 font-black flex items-center justify-center gap-2"
               >
-                <FileText size={18} />
-                Buka PDF Fullscreen
-              </a>
+                <Maximize2 size={18} />
+                Fullscreen PDF
+              </button>
+
+              <div className="h-[560px] rounded-xl overflow-hidden border border-[var(--cream-dark)] bg-zinc-700">
+                <ProtectedPdfViewer url={block.offline_pdf} />
+              </div>
+
+              <p className="text-xs text-[var(--text-light)] mt-3 text-center">
+                Gunakan tombol search pada viewer untuk mencari nama, NOP, atau nomor persil.
+              </p>
             </div>
           ) : (
             <div className="p-6 text-[var(--text-light)]">
@@ -153,20 +171,19 @@ export default function PdfPanel() {
         </div>
       </div>
 
-      {fullscreen && (
+      {fullscreenHtml && (
         <div className="fixed inset-0 z-[9999] bg-black flex flex-col">
           <div className="h-14 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-4">
             <div className="text-white">
-              <div className="font-black text-sm">
-                {block.nama_blok}
-              </div>
+              <div className="font-black text-sm">{block.nama_blok}</div>
+
               <div className="text-xs text-zinc-400">
                 Peta Interaktif Fullscreen
               </div>
             </div>
 
             <button
-              onClick={() => setFullscreen(false)}
+              onClick={() => setFullscreenHtml(false)}
               className="w-10 h-10 rounded-xl bg-red-500 hover:bg-red-600 text-white flex items-center justify-center"
             >
               <X size={22} />
@@ -175,6 +192,31 @@ export default function PdfPanel() {
 
           <div className="flex-1 min-h-0 bg-white">
             <HtmlMapViewer url={block.interactive_map} />
+          </div>
+        </div>
+      )}
+
+      {fullscreenPdf && (
+        <div className="fixed inset-0 z-[9999] bg-black flex flex-col">
+          <div className="h-14 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-4">
+            <div className="text-white">
+              <div className="font-black text-sm">{block.nama_blok}</div>
+
+              <div className="text-xs text-zinc-400">
+                PDF Offline Fullscreen
+              </div>
+            </div>
+
+            <button
+              onClick={() => setFullscreenPdf(false)}
+              className="w-10 h-10 rounded-xl bg-red-500 hover:bg-red-600 text-white flex items-center justify-center"
+            >
+              <X size={22} />
+            </button>
+          </div>
+
+          <div className="flex-1 min-h-0 bg-zinc-700">
+            <ProtectedPdfViewer url={block.offline_pdf} />
           </div>
         </div>
       )}
