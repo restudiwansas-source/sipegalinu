@@ -10,7 +10,7 @@ import {
 import { cleanKodeBlok } from "../utils/format";
 
 /* =========================
-   GET BLOCKS
+   BLOCKS
 ========================= */
 export async function getBlocks() {
   if (!supabase) return demoBlocks;
@@ -28,21 +28,9 @@ export async function getBlocks() {
   return data?.length ? data : demoBlocks;
 }
 
-/* =========================
-   UPLOAD BLOCK FILES
-   HTML dipaksa sebagai text/html
-========================= */
-export async function uploadBlockFiles({
-  kodeBlok,
-  namaBlok,
-  htmlFile,
-  pdfFile,
-}) {
+export async function uploadBlockFiles({ kodeBlok, namaBlok, htmlFile, pdfFile }) {
   if (!supabase) {
-    return {
-      success: false,
-      message: "Supabase belum dikonfigurasi. Isi file .env terlebih dahulu.",
-    };
+    return { success: false, message: "Supabase belum dikonfigurasi." };
   }
 
   if (!kodeBlok || !namaBlok || !htmlFile || !pdfFile) {
@@ -53,22 +41,14 @@ export async function uploadBlockFiles({
   }
 
   const kode = cleanKodeBlok(kodeBlok);
-
   const htmlPath = `blocks/${kode}/interactive.html`;
   const pdfPath = `blocks/${kode}/offline.pdf`;
 
   try {
-    /* =========================
-       HAPUS FILE LAMA
-    ========================= */
     await supabase.storage.from("maps").remove([htmlPath]);
     await supabase.storage.from("pdfs").remove([pdfPath]);
 
-    /* =========================
-       PAKSA HTML SEBAGAI text/html
-    ========================= */
     const htmlText = await htmlFile.text();
-
     const htmlBlob = new Blob([htmlText], {
       type: "text/html;charset=utf-8",
     });
@@ -81,13 +61,8 @@ export async function uploadBlockFiles({
         contentType: "text/html;charset=utf-8",
       });
 
-    if (htmlError) {
-      throw htmlError;
-    }
+    if (htmlError) throw htmlError;
 
-    /* =========================
-       UPLOAD PDF
-    ========================= */
     const { error: pdfError } = await supabase.storage
       .from("pdfs")
       .upload(pdfPath, pdfFile, {
@@ -96,13 +71,8 @@ export async function uploadBlockFiles({
         contentType: "application/pdf",
       });
 
-    if (pdfError) {
-      throw pdfError;
-    }
+    if (pdfError) throw pdfError;
 
-    /* =========================
-       GET PUBLIC URL
-    ========================= */
     const htmlUrl = supabase.storage
       .from("maps")
       .getPublicUrl(htmlPath).data.publicUrl;
@@ -111,9 +81,6 @@ export async function uploadBlockFiles({
       .from("pdfs")
       .getPublicUrl(pdfPath).data.publicUrl;
 
-    /* =========================
-       SAVE DATABASE
-    ========================= */
     const { error: dbError } = await supabase.from("blocks").upsert(
       {
         kode_blok: kode,
@@ -121,14 +88,10 @@ export async function uploadBlockFiles({
         interactive_map: `${htmlUrl}?v=${Date.now()}`,
         offline_pdf: `${pdfUrl}?v=${Date.now()}`,
       },
-      {
-        onConflict: "kode_blok",
-      }
+      { onConflict: "kode_blok" }
     );
 
-    if (dbError) {
-      throw dbError;
-    }
+    if (dbError) throw dbError;
 
     return {
       success: true,
@@ -138,7 +101,6 @@ export async function uploadBlockFiles({
     };
   } catch (error) {
     console.error("Upload gagal:", error);
-
     return {
       success: false,
       message: error.message || "Upload gagal.",
@@ -148,6 +110,7 @@ export async function uploadBlockFiles({
 
 /* =========================
    SETTINGS
+   UUID SAFE
 ========================= */
 export async function getSettings() {
   if (!supabase) return defaultSettings;
@@ -177,24 +140,112 @@ export async function saveSettings(settings) {
     };
   }
 
-  const { error } = await supabase.from("settings").insert([
-    {
+  try {
+    const payload = {
       ...settings,
       updated_at: new Date().toISOString(),
-    },
-  ]);
+    };
 
-  if (error) {
+    delete payload.id;
+    delete payload.created_at;
+
+    const { data: existing, error: findError } = await supabase
+      .from("settings")
+      .select("id")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (findError) throw findError;
+
+    let result;
+
+    if (existing?.id) {
+      result = await supabase
+        .from("settings")
+        .update(payload)
+        .eq("id", existing.id);
+    } else {
+      result = await supabase
+        .from("settings")
+        .insert(payload);
+    }
+
+    if (result.error) throw result.error;
+
+    return {
+      success: true,
+      message: "Pengaturan berhasil disimpan.",
+    };
+  } catch (error) {
+    console.error("Gagal menyimpan settings:", error);
+
     return {
       success: false,
-      message: error.message,
+      message: error.message || "Gagal menyimpan pengaturan.",
+    };
+  }
+}
+
+/* =========================
+   LOGO UPLOAD
+========================= */
+export async function uploadLogoFile(file) {
+  if (!supabase) {
+    return {
+      success: false,
+      message: "Supabase belum dikonfigurasi.",
     };
   }
 
-  return {
-    success: true,
-    message: "Pengaturan berhasil disimpan.",
-  };
+  if (!file) {
+    return {
+      success: false,
+      message: "File logo belum dipilih.",
+    };
+  }
+
+  const allowedTypes = ["image/png", "image/jpeg", "image/jpg"];
+
+  if (!allowedTypes.includes(file.type)) {
+    return {
+      success: false,
+      message: "Logo harus berformat PNG, JPG, atau JPEG.",
+    };
+  }
+
+  try {
+    const ext = file.name.split(".").pop();
+    const fileName = `logo-${Date.now()}.${ext}`;
+    const filePath = `branding/${fileName}`;
+
+    const { error } = await supabase.storage
+      .from("logos")
+      .upload(filePath, file, {
+        upsert: true,
+        cacheControl: "0",
+        contentType: file.type,
+      });
+
+    if (error) throw error;
+
+    const publicUrl = supabase.storage
+      .from("logos")
+      .getPublicUrl(filePath).data.publicUrl;
+
+    return {
+      success: true,
+      message: "Logo berhasil diupload.",
+      url: `${publicUrl}?v=${Date.now()}`,
+    };
+  } catch (error) {
+    console.error("Upload logo gagal:", error);
+
+    return {
+      success: false,
+      message: error.message || "Upload logo gagal.",
+    };
+  }
 }
 
 /* =========================
@@ -248,7 +299,10 @@ export async function deleteMenu(id) {
     };
   }
 
-  const { error } = await supabase.from("menus").delete().eq("id", id);
+  const { error } = await supabase
+    .from("menus")
+    .delete()
+    .eq("id", id);
 
   if (error) {
     return {
@@ -307,7 +361,7 @@ export async function saveRole(role) {
 }
 
 /* =========================
-   USERS
+   USERS LOCAL PROFILE TABLE
 ========================= */
 export async function getUsers() {
   if (!supabase) return demoUsers;
@@ -338,9 +392,9 @@ export async function saveUser(user) {
     active: user.active ?? true,
   };
 
-  const { error } = await supabase.from("app_users").upsert(payload, {
-    onConflict: "username",
-  });
+  const { error } = await supabase
+    .from("app_users")
+    .upsert(payload, { onConflict: "username" });
 
   if (error) {
     return {
@@ -363,7 +417,10 @@ export async function deleteUser(id) {
     };
   }
 
-  const { error } = await supabase.from("app_users").delete().eq("id", id);
+  const { error } = await supabase
+    .from("app_users")
+    .delete()
+    .eq("id", id);
 
   if (error) {
     return {
@@ -377,6 +434,7 @@ export async function deleteUser(id) {
     message: "User berhasil dihapus.",
   };
 }
+
 /* =========================
    WAJIB PAJAK REAL DATA
 ========================= */
@@ -444,8 +502,7 @@ export async function importWajibPajakExcel({ file, kodeBlok }) {
         luas_bangunan: Number(row[5]) || 0,
         desa: String(row[6] || "").trim(),
         tanggal_data: String(row[7] || "").trim(),
-        pajak:
-          Number(String(row[8] || "0").replace(/[^\d]/g, "")) || 0,
+        pajak: Number(String(row[8] || "0").replace(/[^\d]/g, "")) || 0,
         status_bayar: "belum",
       }));
 
@@ -475,63 +532,6 @@ export async function importWajibPajakExcel({ file, kodeBlok }) {
     return {
       success: false,
       message: error.message || "Import Excel gagal.",
-    };
-  }
-}
-export async function uploadLogoFile(file) {
-  if (!supabase) {
-    return {
-      success: false,
-      message: "Supabase belum dikonfigurasi.",
-    };
-  }
-
-  if (!file) {
-    return {
-      success: false,
-      message: "File logo belum dipilih.",
-    };
-  }
-
-  const allowedTypes = ["image/png", "image/jpeg", "image/jpg"];
-
-  if (!allowedTypes.includes(file.type)) {
-    return {
-      success: false,
-      message: "Logo harus berformat PNG, JPG, atau JPEG.",
-    };
-  }
-
-  try {
-    const ext = file.name.split(".").pop();
-    const fileName = `logo-${Date.now()}.${ext}`;
-    const filePath = `branding/${fileName}`;
-
-    const { error } = await supabase.storage
-      .from("logos")
-      .upload(filePath, file, {
-        upsert: true,
-        cacheControl: "0",
-        contentType: file.type,
-      });
-
-    if (error) throw error;
-
-    const publicUrl = supabase.storage
-      .from("logos")
-      .getPublicUrl(filePath).data.publicUrl;
-
-    return {
-      success: true,
-      message: "Logo berhasil diupload.",
-      url: `${publicUrl}?v=${Date.now()}`,
-    };
-  } catch (error) {
-    console.error("Upload logo gagal:", error);
-
-    return {
-      success: false,
-      message: error.message || "Upload logo gagal.",
     };
   }
 }
