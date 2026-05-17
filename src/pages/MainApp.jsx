@@ -2,7 +2,7 @@ export default function MainApp() {
   const { activeTab } = useAppStore();
 
   return (
-    <div className="app-shell safe-screen">
+    <div className="app-shell">
       <Topbar />
       <TabBar />
 

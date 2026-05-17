@@ -5,7 +5,7 @@ export default function Topbar() {
   const { user, settings, setAdminOpen } = useAppStore();
 
   return (
-    <header className="topbar" style={{ background: `linear-gradient(135deg, ${settings.header_color || "#1a3a2a"}, var(--green-mid))` }}>
+    <header className="topbar safe-top" style={{ background: `linear-gradient(135deg, ${settings.header_color || "#1a3a2a"}, var(--green-mid))` }}>
       <div className="flex items-center gap-3">
         <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--gold)] to-[var(--gold-light)] flex items-center justify-center shadow-md overflow-hidden">
           {settings.logo_url ? <img src={settings.logo_url} className="w-full h-full object-cover" /> : "🏛️"}
