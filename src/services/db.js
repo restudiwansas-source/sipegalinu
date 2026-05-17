@@ -28,9 +28,17 @@ export async function getBlocks() {
   return data?.length ? data : demoBlocks;
 }
 
-export async function uploadBlockFiles({ kodeBlok, namaBlok, htmlFile, pdfFile }) {
+export async function uploadBlockFiles({
+  kodeBlok,
+  namaBlok,
+  htmlFile,
+  pdfFile,
+}) {
   if (!supabase) {
-    return { success: false, message: "Supabase belum dikonfigurasi." };
+    return {
+      success: false,
+      message: "Supabase belum dikonfigurasi.",
+    };
   }
 
   if (!kodeBlok || !namaBlok || !htmlFile || !pdfFile) {
@@ -41,6 +49,7 @@ export async function uploadBlockFiles({ kodeBlok, namaBlok, htmlFile, pdfFile }
   }
 
   const kode = cleanKodeBlok(kodeBlok);
+
   const htmlPath = `blocks/${kode}/interactive.html`;
   const pdfPath = `blocks/${kode}/offline.pdf`;
 
@@ -49,6 +58,7 @@ export async function uploadBlockFiles({ kodeBlok, namaBlok, htmlFile, pdfFile }
     await supabase.storage.from("pdfs").remove([pdfPath]);
 
     const htmlText = await htmlFile.text();
+
     const htmlBlob = new Blob([htmlText], {
       type: "text/html;charset=utf-8",
     });
@@ -86,9 +96,16 @@ export async function uploadBlockFiles({ kodeBlok, namaBlok, htmlFile, pdfFile }
         kode_blok: kode,
         nama_blok: namaBlok,
         interactive_map: `${htmlUrl}?v=${Date.now()}`,
+
+        // masih disimpan untuk kompatibilitas data lama
         offline_pdf: `${pdfUrl}?v=${Date.now()}`,
+
+        // path asli untuk private bucket + signed URL
+        offline_pdf_path: pdfPath,
       },
-      { onConflict: "kode_blok" }
+      {
+        onConflict: "kode_blok",
+      }
     );
 
     if (dbError) throw dbError;
@@ -98,14 +115,58 @@ export async function uploadBlockFiles({ kodeBlok, namaBlok, htmlFile, pdfFile }
       message: "Upload blok berhasil.",
       htmlUrl,
       pdfUrl,
+      pdfPath,
     };
   } catch (error) {
     console.error("Upload gagal:", error);
+
     return {
       success: false,
       message: error.message || "Upload gagal.",
     };
   }
+}
+
+/* =========================
+   PRIVATE PDF SIGNED URL
+========================= */
+export function extractPdfStoragePath(input) {
+  if (!input) return "";
+
+  const clean = String(input).split("#")[0].split("?")[0];
+
+  if (clean.startsWith("blocks/")) {
+    return clean;
+  }
+
+  if (clean.includes("/object/public/pdfs/")) {
+    return clean.split("/object/public/pdfs/")[1];
+  }
+
+  if (clean.includes("/object/sign/pdfs/")) {
+    return clean.split("/object/sign/pdfs/")[1];
+  }
+
+  return clean;
+}
+
+export async function getSignedPdfUrl(pdfPathOrUrl, expiresIn = 3600) {
+  if (!supabase) return "";
+
+  const path = extractPdfStoragePath(pdfPathOrUrl);
+
+  if (!path) return "";
+
+  const { data, error } = await supabase.storage
+    .from("pdfs")
+    .createSignedUrl(path, expiresIn);
+
+  if (error) {
+    console.error("Gagal membuat signed PDF URL:", error);
+    return "";
+  }
+
+  return data?.signedUrl || "";
 }
 
 /* =========================
@@ -166,9 +227,7 @@ export async function saveSettings(settings) {
         .update(payload)
         .eq("id", existing.id);
     } else {
-      result = await supabase
-        .from("settings")
-        .insert(payload);
+      result = await supabase.from("settings").insert(payload);
     }
 
     if (result.error) throw result.error;
@@ -276,7 +335,9 @@ export async function saveMenu(menu) {
 
   const { error } = await supabase
     .from("menus")
-    .upsert(menu, { onConflict: "id" });
+    .upsert(menu, {
+      onConflict: "id",
+    });
 
   if (error) {
     return {
@@ -299,10 +360,7 @@ export async function deleteMenu(id) {
     };
   }
 
-  const { error } = await supabase
-    .from("menus")
-    .delete()
-    .eq("id", id);
+  const { error } = await supabase.from("menus").delete().eq("id", id);
 
   if (error) {
     return {
@@ -343,9 +401,9 @@ export async function saveRole(role) {
     };
   }
 
-  const { error } = await supabase
-    .from("roles")
-    .upsert(role, { onConflict: "id" });
+  const { error } = await supabase.from("roles").upsert(role, {
+    onConflict: "id",
+  });
 
   if (error) {
     return {
@@ -392,9 +450,9 @@ export async function saveUser(user) {
     active: user.active ?? true,
   };
 
-  const { error } = await supabase
-    .from("app_users")
-    .upsert(payload, { onConflict: "username" });
+  const { error } = await supabase.from("app_users").upsert(payload, {
+    onConflict: "username",
+  });
 
   if (error) {
     return {
@@ -417,10 +475,7 @@ export async function deleteUser(id) {
     };
   }
 
-  const { error } = await supabase
-    .from("app_users")
-    .delete()
-    .eq("id", id);
+  const { error } = await supabase.from("app_users").delete().eq("id", id);
 
   if (error) {
     return {
@@ -513,11 +568,9 @@ export async function importWajibPajakExcel({ file, kodeBlok }) {
       };
     }
 
-    const { error } = await supabase
-      .from("wajib_pajak")
-      .upsert(payload, {
-        onConflict: "kode_blok,nop",
-      });
+    const { error } = await supabase.from("wajib_pajak").upsert(payload, {
+      onConflict: "kode_blok,nop",
+    });
 
     if (error) throw error;
 

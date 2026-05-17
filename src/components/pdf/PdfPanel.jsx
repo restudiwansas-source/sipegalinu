@@ -1,16 +1,53 @@
-import { useState } from "react";
-import { FileText, Globe, Maximize2, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  FileText,
+  Globe,
+  Maximize2,
+  X,
+  Search,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 import { useAppStore } from "../../store/appStore";
 import HtmlMapViewer from "../map/HtmlMapViewer";
-import ProtectedPdfViewer from "./ProtectedPdfViewer";
+import SearchablePdfViewer from "./SearchablePdfViewer";
+import { getSignedPdfUrl } from "../../services/db";
 
 export default function PdfPanel() {
   const { blocks, selectedBlock, setSelectedBlock, setActiveTab } = useAppStore();
 
   const [fullscreenHtml, setFullscreenHtml] = useState(false);
   const [fullscreenPdf, setFullscreenPdf] = useState(false);
+  const [searchMode, setSearchMode] = useState(false);
+
+  const [signedPdfUrl, setSignedPdfUrl] = useState("");
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const block = selectedBlock || blocks?.[0];
+
+  async function loadSignedPdfUrl(targetBlock = block) {
+    if (!targetBlock?.offline_pdf && !targetBlock?.offline_pdf_path) {
+      setSignedPdfUrl("");
+      return "";
+    }
+
+    setPdfLoading(true);
+
+    const source = targetBlock.offline_pdf_path || targetBlock.offline_pdf;
+
+    const url = await getSignedPdfUrl(source, 3600);
+
+    setSignedPdfUrl(url);
+    setPdfLoading(false);
+
+    return url;
+  }
+
+  useEffect(() => {
+    if (block) {
+      loadSignedPdfUrl(block);
+    }
+  }, [block?.id, block?.offline_pdf, block?.offline_pdf_path]);
 
   if (!block) {
     return (
@@ -18,6 +55,16 @@ export default function PdfPanel() {
         Belum ada data blok
       </div>
     );
+  }
+
+  async function openFullscreenPdf() {
+    await loadSignedPdfUrl(block);
+    setFullscreenPdf(true);
+  }
+
+  async function openSearchMode() {
+    await loadSignedPdfUrl(block);
+    setSearchMode(true);
   }
 
   return (
@@ -136,7 +183,7 @@ export default function PdfPanel() {
 
             {block.offline_pdf && (
               <button
-                onClick={() => setFullscreenPdf(true)}
+                onClick={openFullscreenPdf}
                 className="px-3 py-2 rounded-xl bg-red-500 text-white text-xs font-black flex items-center gap-2"
               >
                 <Maximize2 size={15} />
@@ -148,19 +195,38 @@ export default function PdfPanel() {
           {block.offline_pdf ? (
             <div className="m-4">
               <button
-                onClick={() => setFullscreenPdf(true)}
+                onClick={openFullscreenPdf}
                 className="mb-3 w-full bg-red-500 hover:bg-red-600 text-white rounded-xl p-3 font-black flex items-center justify-center gap-2"
               >
                 <Maximize2 size={18} />
                 Fullscreen PDF
               </button>
 
-              <div className="h-[560px] rounded-xl overflow-hidden border border-[var(--cream-dark)] bg-zinc-700">
-                <ProtectedPdfViewer url={block.offline_pdf} />
+              <button
+                onClick={openSearchMode}
+                className="mb-3 w-full bg-yellow-500 hover:bg-yellow-600 text-[var(--green-deep)] rounded-xl p-3 font-black flex items-center justify-center gap-2"
+              >
+                <Search size={18} />
+                Mode Cari Persil
+              </button>
+
+              <div className="h-[560px] rounded-xl overflow-hidden border border-[var(--cream-dark)] bg-white relative">
+                {pdfLoading ? (
+                  <div className="w-full h-full flex items-center justify-center text-[var(--text-light)]">
+                    Membuat akses PDF aman...
+                  </div>
+                ) : signedPdfUrl ? (
+                  <PdfIframeProtected url={signedPdfUrl} />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-red-500">
+                    PDF gagal dimuat
+                  </div>
+                )}
               </div>
 
-              <p className="text-xs text-[var(--text-light)] mt-3 text-center">
-                Gunakan tombol search pada viewer untuk mencari nama, NOP, atau nomor persil.
+              <p className="text-xs text-[var(--text-light)] mt-3 text-center flex items-center justify-center gap-1">
+                <Search size={13} />
+                PDF memakai signed URL sementara. Mode Cari Persil untuk highlight otomatis.
               </p>
             </div>
           ) : (
@@ -215,12 +281,129 @@ export default function PdfPanel() {
             </button>
           </div>
 
-          <div className="flex-1 min-h-0 bg-zinc-700">
-            <ProtectedPdfViewer url={block.offline_pdf} />
+          <div className="flex-1 min-h-0 bg-white relative">
+            {signedPdfUrl ? (
+              <PdfIframeProtected url={signedPdfUrl} fullscreen />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-red-500">
+                PDF gagal dimuat
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {searchMode && (
+        <div className="fixed inset-0 z-[9999] bg-black flex flex-col">
+          <div className="h-14 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-4">
+            <div className="text-white">
+              <div className="font-black text-sm">{block.nama_blok}</div>
+
+              <div className="text-xs text-zinc-400">
+                Mode Cari Persil — Highlight Otomatis
+              </div>
+            </div>
+
+            <button
+              onClick={() => setSearchMode(false)}
+              className="w-10 h-10 rounded-xl bg-red-500 hover:bg-red-600 text-white flex items-center justify-center"
+            >
+              <X size={22} />
+            </button>
+          </div>
+
+          <div className="flex-1 min-h-0 bg-zinc-300">
+            {signedPdfUrl ? (
+              <SearchablePdfViewer url={signedPdfUrl} />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-red-500">
+                PDF gagal dimuat
+              </div>
+            )}
           </div>
         </div>
       )}
     </section>
+  );
+}
+
+function PdfIframeProtected({ url, fullscreen = false }) {
+  const [zoom, setZoom] = useState(100);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const viewerUrl = useMemo(() => {
+    if (!url) return "";
+
+    const cleanUrl = url.split("#")[0];
+
+    return `${cleanUrl}#toolbar=1&navpanes=0&scrollbar=1&zoom=${zoom}`;
+  }, [url, zoom, reloadKey]);
+
+  function zoomOut() {
+    setZoom((z) => Math.max(50, z - 25));
+    setReloadKey((n) => n + 1);
+  }
+
+  function zoomIn() {
+    setZoom((z) => Math.min(400, z + 25));
+    setReloadKey((n) => n + 1);
+  }
+
+  function resetZoom() {
+    setZoom(100);
+    setReloadKey((n) => n + 1);
+  }
+
+  return (
+    <div className="w-full h-full relative bg-white overflow-hidden">
+      <div className="absolute top-0 left-0 right-0 h-[64px] bg-zinc-950 z-30 flex items-center gap-2 px-2 border-b border-zinc-800">
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={zoomOut}
+            className="h-9 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-black flex items-center gap-1"
+          >
+            <ZoomOut size={15} />
+            -
+          </button>
+
+          <button
+            onClick={resetZoom}
+            className="h-9 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-black"
+          >
+            {zoom}%
+          </button>
+
+          <button
+            onClick={zoomIn}
+            className="h-9 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-black flex items-center gap-1"
+          >
+            <ZoomIn size={15} />
+            +
+          </button>
+        </div>
+
+        <div className="flex-1 text-right text-[10px] text-zinc-400 pr-2">
+          Akses PDF memakai signed URL sementara
+        </div>
+      </div>
+
+      <iframe
+        key={reloadKey}
+        src={viewerUrl}
+        title="PDF Offline"
+        className="absolute inset-0 w-full h-full border-0 bg-white"
+      />
+
+      <div className="absolute top-0 left-0 right-0 h-[64px] bg-zinc-950 z-20 pointer-events-none" />
+
+      {fullscreen && (
+        <div className="absolute bottom-3 left-3 right-3 z-30 pointer-events-none">
+          <div className="bg-black/60 text-white text-[11px] rounded-xl px-3 py-2 text-center">
+            Gunakan tombol zoom di atas. Untuk highlight otomatis gunakan Mode Cari Persil.
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
