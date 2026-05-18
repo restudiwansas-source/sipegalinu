@@ -104,6 +104,21 @@ export default function PdfPanel() {
   async function openFullscreenPdf() {
   const url = await loadSignedPdfUrl(block);
 
+  alert(window.AndroidPdf ? "AndroidPdf ADA" : "AndroidPdf TIDAK ADA");
+
+  if (!url) {
+    alert("URL PDF gagal dibuat.");
+    return;
+  }
+
+  if (window.AndroidPdf && typeof window.AndroidPdf.openPdf === "function") {
+    window.AndroidPdf.openPdf(url, block?.nama_blok || "PDF Peta");
+    return;
+  }
+
+  setFullscreenPdf(true);
+}
+
   if (window.AndroidPdf && typeof window.AndroidPdf.openPdf === "function") {
     window.AndroidPdf.openPdf(url, block?.nama_blok || "PDF Peta");
     return;
