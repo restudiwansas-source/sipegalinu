@@ -5,8 +5,6 @@ import {
   Maximize2,
   X,
   Search,
-  ZoomIn,
-  ZoomOut,
 } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
 import HtmlMapViewer from "../map/HtmlMapViewer";
@@ -283,7 +281,7 @@ export default function PdfPanel() {
 
               <p className="text-xs text-[var(--text-light)] mt-3 text-center flex items-center justify-center gap-1">
                 <Search size={13} />
-                Pencarian memakai database WP agar ringan di HP.
+                Default sekarang Fit Halaman agar peta tidak terlihat terpotong.
               </p>
             </div>
           ) : (
@@ -385,10 +383,12 @@ export default function PdfPanel() {
 
           <div className="grid grid-cols-3 gap-3 p-3 bg-white border-b border-[var(--cream-dark)]">
             <Stat title="Hasil" value={filteredWp.length} />
+
             <Stat
               title="Luas"
               value={`${totalLuas.toLocaleString("id-ID")} m²`}
             />
+
             <Stat title="Pajak" value={formatRp(totalPajak)} />
           </div>
 
@@ -465,8 +465,8 @@ export default function PdfPanel() {
 }
 
 function PdfIframeProtected({ url, fullscreen = false }) {
-  const [zoom, setZoom] = useState(100);
   const [reloadKey, setReloadKey] = useState(0);
+  const [viewMode, setViewMode] = useState("Fit");
 
   const isAndroid = /Android/i.test(navigator.userAgent);
 
@@ -481,62 +481,92 @@ function PdfIframeProtected({ url, fullscreen = false }) {
       )}`;
     }
 
-    return `${cleanUrl}#toolbar=1&navpanes=0&scrollbar=1&zoom=${zoom}`;
-  }, [url, zoom, reloadKey, isAndroid]);
+    return `${cleanUrl}#toolbar=1&navpanes=0&scrollbar=1&view=${viewMode}`;
+  }, [url, viewMode, reloadKey, isAndroid]);
 
-  function zoomOut() {
-    setZoom((z) => Math.max(50, z - 25));
+  function fitPage() {
+    setViewMode("Fit");
     setReloadKey((n) => n + 1);
   }
 
-  function zoomIn() {
-    setZoom((z) => Math.min(400, z + 25));
+  function fitWidth() {
+    setViewMode("FitH");
     setReloadKey((n) => n + 1);
   }
 
-  function resetZoom() {
-    setZoom(100);
+  function fitHeight() {
+    setViewMode("FitV");
+    setReloadKey((n) => n + 1);
+  }
+
+  function reloadPdf() {
     setReloadKey((n) => n + 1);
   }
 
   return (
     <div className="w-full h-full relative bg-white overflow-hidden">
-      <div className="absolute top-0 left-0 right-0 h-[64px] bg-zinc-950 z-30 flex items-center gap-2 px-2 border-b border-zinc-800">
+      <div className="absolute top-0 left-0 right-0 h-[64px] bg-zinc-950 z-30 flex items-center gap-2 px-2 border-b border-zinc-800 overflow-x-auto">
         {!isAndroid ? (
           <div className="flex items-center gap-1 shrink-0">
             <button
-              onClick={zoomOut}
-              className="h-9 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-black flex items-center gap-1"
+              onClick={fitPage}
+              className={`h-9 px-3 rounded-xl text-white text-xs font-black ${
+                viewMode === "Fit"
+                  ? "bg-[var(--green-mid)]"
+                  : "bg-zinc-800 hover:bg-zinc-700"
+              }`}
             >
-              <ZoomOut size={15} />
-              -
+              Fit Halaman
             </button>
 
             <button
-              onClick={resetZoom}
+              onClick={fitWidth}
+              className={`h-9 px-3 rounded-xl text-white text-xs font-black ${
+                viewMode === "FitH"
+                  ? "bg-[var(--green-mid)]"
+                  : "bg-zinc-800 hover:bg-zinc-700"
+              }`}
+            >
+              Fit Lebar
+            </button>
+
+            <button
+              onClick={fitHeight}
+              className={`h-9 px-3 rounded-xl text-white text-xs font-black ${
+                viewMode === "FitV"
+                  ? "bg-[var(--green-mid)]"
+                  : "bg-zinc-800 hover:bg-zinc-700"
+              }`}
+            >
+              Fit Tinggi
+            </button>
+
+            <button
+              onClick={reloadPdf}
               className="h-9 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-black"
             >
-              {zoom}%
-            </button>
-
-            <button
-              onClick={zoomIn}
-              className="h-9 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-black flex items-center gap-1"
-            >
-              <ZoomIn size={15} />
-              +
+              Muat Ulang
             </button>
           </div>
         ) : (
-          <div className="text-white text-xs font-black">
-            PDF Viewer Android
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="text-white text-xs font-black">
+              PDF Viewer Android
+            </div>
+
+            <button
+              onClick={reloadPdf}
+              className="h-9 px-3 rounded-xl bg-[var(--green-mid)] hover:bg-[var(--green-accent)] text-white text-xs font-black"
+            >
+              Muat Ulang
+            </button>
           </div>
         )}
 
-        <div className="flex-1 text-right text-[10px] text-zinc-400 pr-2">
+        <div className="flex-1 text-right text-[10px] text-zinc-400 pr-2 min-w-[180px]">
           {isAndroid
-            ? "PDF ditampilkan dengan viewer khusus Android"
-            : "Akses PDF memakai signed URL sementara"}
+            ? "Jika tetap blank, WebView Android tidak mendukung PDF langsung"
+            : `Mode tampilan: ${viewMode}`}
         </div>
       </div>
 
@@ -544,17 +574,13 @@ function PdfIframeProtected({ url, fullscreen = false }) {
         key={reloadKey}
         src={viewerUrl}
         title="PDF Offline"
-        className="absolute inset-0 w-full h-full border-0 bg-white"
+        className="absolute left-0 right-0 bottom-0 top-[64px] w-full border-0 bg-white"
       />
-
-      <div className="absolute top-0 left-0 right-0 h-[64px] bg-zinc-950 z-20 pointer-events-none" />
 
       {fullscreen && (
         <div className="absolute bottom-3 left-3 right-3 z-30 pointer-events-none">
           <div className="bg-black/60 text-white text-[11px] rounded-xl px-3 py-2 text-center">
-            {isAndroid
-              ? "PDF ditampilkan melalui viewer Android agar tidak blank putih."
-              : "Gunakan tombol zoom di atas. Pencarian dilakukan dari database WP agar stabil di HP."}
+            Gunakan Fit Halaman agar peta tidak terlihat terpotong.
           </div>
         </div>
       )}
@@ -603,14 +629,17 @@ function WpDetailModal({ item, onClose, onOpenPdf }) {
         <div className="grid grid-cols-2 gap-3 mt-5">
           <Info label="Kode Blok" value={item.kode_blok} />
           <Info label="Pajak" value={formatRp(item.pajak)} />
+
           <Info
             label="Luas Tanah"
             value={`${Number(item.luas_tanah || 0).toLocaleString("id-ID")} m²`}
           />
+
           <Info
             label="Luas Bangunan"
             value={`${Number(item.luas_bangunan || 0).toLocaleString("id-ID")} m²`}
           />
+
           <Info label="Desa" value={item.desa || "-"} />
           <Info label="Tanggal Data" value={item.tanggal_data || "-"} />
         </div>
