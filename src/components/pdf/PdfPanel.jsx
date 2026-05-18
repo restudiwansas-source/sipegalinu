@@ -281,7 +281,7 @@ export default function PdfPanel() {
 
               <p className="text-xs text-[var(--text-light)] mt-3 text-center flex items-center justify-center gap-1">
                 <Search size={13} />
-                Default sekarang Fit Halaman agar peta tidak terlihat terpotong.
+                Mode ini mencoba membuka PDF sebagai file lokal sementara.
               </p>
             </div>
           ) : (
@@ -467,120 +467,189 @@ export default function PdfPanel() {
 function PdfIframeProtected({ url, fullscreen = false }) {
   const [reloadKey, setReloadKey] = useState(0);
   const [viewMode, setViewMode] = useState("Fit");
+  const [blobUrl, setBlobUrl] = useState("");
+  const [blobLoading, setBlobLoading] = useState(false);
+  const [blobError, setBlobError] = useState("");
 
-  const isAndroid = /Android/i.test(navigator.userAgent);
+  useEffect(() => {
+    let active = true;
+    let localBlobUrl = "";
 
-  const viewerUrl = useMemo(() => {
-    if (!url) return "";
+    async function loadPdfBlob() {
+      if (!url) {
+        setBlobUrl("");
+        return;
+      }
 
-    const cleanUrl = url.split("#")[0];
+      setBlobLoading(true);
+      setBlobError("");
 
-    if (isAndroid) {
-      return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(
-        cleanUrl
-      )}`;
+      try {
+        const cleanUrl = url.split("#")[0];
+
+        const response = await fetch(cleanUrl, {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          throw new Error(`Gagal mengambil PDF. Status: ${response.status}`);
+        }
+
+        const blob = await response.blob();
+
+        if (blob.type && !blob.type.includes("pdf")) {
+          console.warn("Blob bukan application/pdf:", blob.type);
+        }
+
+        localBlobUrl = URL.createObjectURL(
+          new Blob([blob], { type: "application/pdf" })
+        );
+
+        if (active) {
+          setBlobUrl(localBlobUrl);
+        }
+      } catch (error) {
+        console.error("Gagal membuat Blob PDF:", error);
+
+        if (active) {
+          setBlobUrl("");
+          setBlobError(error.message || "Gagal memuat PDF sebagai file lokal.");
+        }
+      }
+
+      if (active) {
+        setBlobLoading(false);
+      }
     }
 
-    return `${cleanUrl}#toolbar=1&navpanes=0&scrollbar=1&view=${viewMode}`;
-  }, [url, viewMode, reloadKey, isAndroid]);
+    loadPdfBlob();
+
+    return () => {
+      active = false;
+
+      if (localBlobUrl) {
+        URL.revokeObjectURL(localBlobUrl);
+      }
+    };
+  }, [url, reloadKey]);
+
+  const viewerUrl = useMemo(() => {
+    if (!blobUrl) return "";
+
+    return `${blobUrl}#toolbar=1&navpanes=0&scrollbar=1&view=${viewMode}`;
+  }, [blobUrl, viewMode]);
 
   function fitPage() {
     setViewMode("Fit");
-    setReloadKey((n) => n + 1);
   }
 
   function fitWidth() {
     setViewMode("FitH");
-    setReloadKey((n) => n + 1);
   }
 
   function fitHeight() {
     setViewMode("FitV");
-    setReloadKey((n) => n + 1);
   }
 
   function reloadPdf() {
+    if (blobUrl) {
+      URL.revokeObjectURL(blobUrl);
+    }
+
+    setBlobUrl("");
     setReloadKey((n) => n + 1);
   }
 
   return (
     <div className="w-full h-full relative bg-white overflow-hidden">
       <div className="absolute top-0 left-0 right-0 h-[64px] bg-zinc-950 z-30 flex items-center gap-2 px-2 border-b border-zinc-800 overflow-x-auto">
-        {!isAndroid ? (
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              onClick={fitPage}
-              className={`h-9 px-3 rounded-xl text-white text-xs font-black ${
-                viewMode === "Fit"
-                  ? "bg-[var(--green-mid)]"
-                  : "bg-zinc-800 hover:bg-zinc-700"
-              }`}
-            >
-              Fit Halaman
-            </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={fitPage}
+            className={`h-9 px-3 rounded-xl text-white text-xs font-black ${
+              viewMode === "Fit"
+                ? "bg-[var(--green-mid)]"
+                : "bg-zinc-800 hover:bg-zinc-700"
+            }`}
+          >
+            Fit Halaman
+          </button>
 
-            <button
-              onClick={fitWidth}
-              className={`h-9 px-3 rounded-xl text-white text-xs font-black ${
-                viewMode === "FitH"
-                  ? "bg-[var(--green-mid)]"
-                  : "bg-zinc-800 hover:bg-zinc-700"
-              }`}
-            >
-              Fit Lebar
-            </button>
+          <button
+            onClick={fitWidth}
+            className={`h-9 px-3 rounded-xl text-white text-xs font-black ${
+              viewMode === "FitH"
+                ? "bg-[var(--green-mid)]"
+                : "bg-zinc-800 hover:bg-zinc-700"
+            }`}
+          >
+            Fit Lebar
+          </button>
 
-            <button
-              onClick={fitHeight}
-              className={`h-9 px-3 rounded-xl text-white text-xs font-black ${
-                viewMode === "FitV"
-                  ? "bg-[var(--green-mid)]"
-                  : "bg-zinc-800 hover:bg-zinc-700"
-              }`}
-            >
-              Fit Tinggi
-            </button>
+          <button
+            onClick={fitHeight}
+            className={`h-9 px-3 rounded-xl text-white text-xs font-black ${
+              viewMode === "FitV"
+                ? "bg-[var(--green-mid)]"
+                : "bg-zinc-800 hover:bg-zinc-700"
+            }`}
+          >
+            Fit Tinggi
+          </button>
 
-            <button
-              onClick={reloadPdf}
-              className="h-9 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-black"
-            >
-              Muat Ulang
-            </button>
+          <button
+            onClick={reloadPdf}
+            className="h-9 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-black"
+          >
+            Muat Ulang
+          </button>
+        </div>
+
+        <div className="flex-1 text-right text-[10px] text-zinc-400 pr-2 min-w-[220px]">
+          File PDF dibuka sebagai Blob lokal sementara
+        </div>
+      </div>
+
+      <div className="absolute left-0 right-0 bottom-0 top-[64px] bg-white">
+        {blobLoading && (
+          <div className="w-full h-full flex items-center justify-center text-[var(--text-light)]">
+            Mengambil file PDF ke memori aplikasi...
           </div>
-        ) : (
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="text-white text-xs font-black">
-              PDF Viewer Android
+        )}
+
+        {!blobLoading && blobError && (
+          <div className="w-full h-full flex flex-col items-center justify-center text-center p-6">
+            <div className="text-red-600 font-black">
+              PDF gagal dimuat
+            </div>
+
+            <div className="text-xs text-zinc-500 mt-2 max-w-md">
+              {blobError}
             </div>
 
             <button
               onClick={reloadPdf}
-              className="h-9 px-3 rounded-xl bg-[var(--green-mid)] hover:bg-[var(--green-accent)] text-white text-xs font-black"
+              className="mt-4 px-4 py-3 rounded-xl bg-[var(--green-mid)] text-white font-black text-sm"
             >
-              Muat Ulang
+              Coba Muat Ulang
             </button>
           </div>
         )}
 
-        <div className="flex-1 text-right text-[10px] text-zinc-400 pr-2 min-w-[180px]">
-          {isAndroid
-            ? "Jika tetap blank, WebView Android tidak mendukung PDF langsung"
-            : `Mode tampilan: ${viewMode}`}
-        </div>
+        {!blobLoading && !blobError && viewerUrl && (
+          <iframe
+            src={viewerUrl}
+            title="PDF Offline Blob"
+            className="w-full h-full border-0 bg-white"
+          />
+        )}
       </div>
-
-      <iframe
-        key={reloadKey}
-        src={viewerUrl}
-        title="PDF Offline"
-        className="absolute left-0 right-0 bottom-0 top-[64px] w-full border-0 bg-white"
-      />
 
       {fullscreen && (
         <div className="absolute bottom-3 left-3 right-3 z-30 pointer-events-none">
           <div className="bg-black/60 text-white text-[11px] rounded-xl px-3 py-2 text-center">
-            Gunakan Fit Halaman agar peta tidak terlihat terpotong.
+            PDF dibuka dari file sementara di memori aplikasi, bukan dari link langsung.
           </div>
         </div>
       )}
