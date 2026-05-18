@@ -157,13 +157,19 @@ export default function PdfPanel() {
 
           <div className="grid grid-cols-2 border-b border-[var(--cream-dark)]">
             <Meta label="Nomor Blok" value={block.kode_blok} />
-            <Meta label="Jumlah Objek" value={`${wpData.length || block.jumlah_objek || 0} unit`} />
+
+            <Meta
+              label="Jumlah Objek"
+              value={`${wpData.length || block.jumlah_objek || 0} unit`}
+            />
+
             <Meta
               label="Total Pajak"
               value={formatRp(
                 wpData.reduce((sum, item) => sum + Number(item.pajak || 0), 0)
               )}
             />
+
             <Meta
               label="Status"
               value={block.interactive_map ? "HTML tersedia" : "Belum upload"}
@@ -277,7 +283,7 @@ export default function PdfPanel() {
 
               <p className="text-xs text-[var(--text-light)] mt-3 text-center flex items-center justify-center gap-1">
                 <Search size={13} />
-                Pencarian sekarang memakai database WP agar ringan di HP.
+                Pencarian memakai database WP agar ringan di HP.
               </p>
             </div>
           ) : (
@@ -462,13 +468,21 @@ function PdfIframeProtected({ url, fullscreen = false }) {
   const [zoom, setZoom] = useState(100);
   const [reloadKey, setReloadKey] = useState(0);
 
+  const isAndroid = /Android/i.test(navigator.userAgent);
+
   const viewerUrl = useMemo(() => {
     if (!url) return "";
 
     const cleanUrl = url.split("#")[0];
 
+    if (isAndroid) {
+      return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(
+        cleanUrl
+      )}`;
+    }
+
     return `${cleanUrl}#toolbar=1&navpanes=0&scrollbar=1&zoom=${zoom}`;
-  }, [url, zoom, reloadKey]);
+  }, [url, zoom, reloadKey, isAndroid]);
 
   function zoomOut() {
     setZoom((z) => Math.max(50, z - 25));
@@ -488,33 +502,41 @@ function PdfIframeProtected({ url, fullscreen = false }) {
   return (
     <div className="w-full h-full relative bg-white overflow-hidden">
       <div className="absolute top-0 left-0 right-0 h-[64px] bg-zinc-950 z-30 flex items-center gap-2 px-2 border-b border-zinc-800">
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={zoomOut}
-            className="h-9 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-black flex items-center gap-1"
-          >
-            <ZoomOut size={15} />
-            -
-          </button>
+        {!isAndroid ? (
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={zoomOut}
+              className="h-9 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-black flex items-center gap-1"
+            >
+              <ZoomOut size={15} />
+              -
+            </button>
 
-          <button
-            onClick={resetZoom}
-            className="h-9 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-black"
-          >
-            {zoom}%
-          </button>
+            <button
+              onClick={resetZoom}
+              className="h-9 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-black"
+            >
+              {zoom}%
+            </button>
 
-          <button
-            onClick={zoomIn}
-            className="h-9 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-black flex items-center gap-1"
-          >
-            <ZoomIn size={15} />
-            +
-          </button>
-        </div>
+            <button
+              onClick={zoomIn}
+              className="h-9 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-black flex items-center gap-1"
+            >
+              <ZoomIn size={15} />
+              +
+            </button>
+          </div>
+        ) : (
+          <div className="text-white text-xs font-black">
+            PDF Viewer Android
+          </div>
+        )}
 
         <div className="flex-1 text-right text-[10px] text-zinc-400 pr-2">
-          Akses PDF memakai signed URL sementara
+          {isAndroid
+            ? "PDF ditampilkan dengan viewer khusus Android"
+            : "Akses PDF memakai signed URL sementara"}
         </div>
       </div>
 
@@ -530,7 +552,9 @@ function PdfIframeProtected({ url, fullscreen = false }) {
       {fullscreen && (
         <div className="absolute bottom-3 left-3 right-3 z-30 pointer-events-none">
           <div className="bg-black/60 text-white text-[11px] rounded-xl px-3 py-2 text-center">
-            Gunakan tombol zoom di atas. Pencarian dilakukan dari database WP agar stabil di HP.
+            {isAndroid
+              ? "PDF ditampilkan melalui viewer Android agar tidak blank putih."
+              : "Gunakan tombol zoom di atas. Pencarian dilakukan dari database WP agar stabil di HP."}
           </div>
         </div>
       )}
