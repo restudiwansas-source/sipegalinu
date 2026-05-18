@@ -1,11 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  FileText,
-  Globe,
-  Maximize2,
-  X,
-  Search,
-} from "lucide-react";
+import { FileText, Globe, Maximize2, X, Search } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
 import HtmlMapViewer from "../map/HtmlMapViewer";
 import { getSignedPdfUrl, getWajibPajak } from "../../services/db";
@@ -36,13 +30,19 @@ export default function PdfPanel() {
 
     setPdfLoading(true);
 
-    const source = targetBlock.offline_pdf_path || targetBlock.offline_pdf;
-    const url = await getSignedPdfUrl(source, 3600);
+    try {
+      const source = targetBlock.offline_pdf_path || targetBlock.offline_pdf;
+      const url = await getSignedPdfUrl(source, 3600);
 
-    setSignedPdfUrl(url);
-    setPdfLoading(false);
-
-    return url;
+      setSignedPdfUrl(url || "");
+      return url || "";
+    } catch (error) {
+      console.error("Gagal membuat signed URL PDF:", error);
+      setSignedPdfUrl("");
+      return "";
+    } finally {
+      setPdfLoading(false);
+    }
   }
 
   async function loadWpData(targetBlock = block) {
@@ -53,10 +53,15 @@ export default function PdfPanel() {
 
     setWpLoading(true);
 
-    const data = await getWajibPajak(targetBlock.kode_blok);
-
-    setWpData(data || []);
-    setWpLoading(false);
+    try {
+      const data = await getWajibPajak(targetBlock.kode_blok);
+      setWpData(data || []);
+    } catch (error) {
+      console.error("Gagal memuat data WP:", error);
+      setWpData([]);
+    } finally {
+      setWpLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -93,46 +98,35 @@ export default function PdfPanel() {
     0
   );
 
-  if (!block) {
-    return (
-      <div className="w-full h-full flex items-center justify-center text-zinc-500 bg-[var(--cream)]">
-        Belum ada data blok
-      </div>
-    );
-  }
-
   async function openFullscreenPdf() {
-  const url = await loadSignedPdfUrl(block);
+    const url = await loadSignedPdfUrl(block);
 
-  alert(window.AndroidPdf ? "AndroidPdf ADA" : "AndroidPdf TIDAK ADA");
+    alert(window.AndroidPdf ? "AndroidPdf ADA" : "AndroidPdf TIDAK ADA");
 
-  if (!url) {
-    alert("URL PDF gagal dibuat.");
-    return;
-  }
+    if (!url) {
+      alert("URL PDF gagal dibuat.");
+      return;
+    }
 
-  if (window.AndroidPdf && typeof window.AndroidPdf.openPdf === "function") {
-    window.AndroidPdf.openPdf(url, block?.nama_blok || "PDF Peta");
-    return;
-  }
+    if (window.AndroidPdf && typeof window.AndroidPdf.openPdf === "function") {
+      window.AndroidPdf.openPdf(url, block?.nama_blok || "PDF Peta");
+      return;
+    }
 
-  setFullscreenPdf(true);
-}
-
-  if (window.AndroidPdf && typeof window.AndroidPdf.openPdf === "function") {
-    window.AndroidPdf.openPdf(url, block?.nama_blok || "PDF Peta");
-    return;
-  }
-
-  setFullscreenPdf(true);
-}
-    await loadSignedPdfUrl(block);
     setFullscreenPdf(true);
   }
 
   async function openSearchMode() {
     await loadWpData(block);
     setSearchMode(true);
+  }
+
+  if (!block) {
+    return (
+      <div className="w-full h-full flex items-center justify-center text-zinc-500 bg-[var(--cream)]">
+        Belum ada data blok
+      </div>
+    );
   }
 
   return (
@@ -305,7 +299,7 @@ export default function PdfPanel() {
 
               <p className="text-xs text-[var(--text-light)] mt-3 text-center flex items-center justify-center gap-1">
                 <Search size={13} />
-                Mode ini mencoba membuka PDF sebagai file lokal sementara.
+                Di APK, tombol Fullscreen PDF akan mencoba membuka Native PDF Viewer.
               </p>
             </div>
           ) : (
@@ -480,7 +474,7 @@ export default function PdfPanel() {
           onOpenPdf={() => {
             setSelectedWp(null);
             setSearchMode(false);
-            setFullscreenPdf(true);
+            openFullscreenPdf();
           }}
         />
       )}
@@ -491,97 +485,31 @@ export default function PdfPanel() {
 function PdfIframeProtected({ url, fullscreen = false }) {
   const [reloadKey, setReloadKey] = useState(0);
   const [viewMode, setViewMode] = useState("Fit");
-  const [blobUrl, setBlobUrl] = useState("");
-  const [blobLoading, setBlobLoading] = useState(false);
-  const [blobError, setBlobError] = useState("");
-
-  useEffect(() => {
-    let active = true;
-    let localBlobUrl = "";
-
-    async function loadPdfBlob() {
-      if (!url) {
-        setBlobUrl("");
-        return;
-      }
-
-      setBlobLoading(true);
-      setBlobError("");
-
-      try {
-        const cleanUrl = url.split("#")[0];
-
-        const response = await fetch(cleanUrl, {
-          method: "GET",
-          cache: "no-store",
-        });
-
-        if (!response.ok) {
-          throw new Error(`Gagal mengambil PDF. Status: ${response.status}`);
-        }
-
-        const blob = await response.blob();
-
-        if (blob.type && !blob.type.includes("pdf")) {
-          console.warn("Blob bukan application/pdf:", blob.type);
-        }
-
-        localBlobUrl = URL.createObjectURL(
-          new Blob([blob], { type: "application/pdf" })
-        );
-
-        if (active) {
-          setBlobUrl(localBlobUrl);
-        }
-      } catch (error) {
-        console.error("Gagal membuat Blob PDF:", error);
-
-        if (active) {
-          setBlobUrl("");
-          setBlobError(error.message || "Gagal memuat PDF sebagai file lokal.");
-        }
-      }
-
-      if (active) {
-        setBlobLoading(false);
-      }
-    }
-
-    loadPdfBlob();
-
-    return () => {
-      active = false;
-
-      if (localBlobUrl) {
-        URL.revokeObjectURL(localBlobUrl);
-      }
-    };
-  }, [url, reloadKey]);
 
   const viewerUrl = useMemo(() => {
-    if (!blobUrl) return "";
+    if (!url) return "";
 
-    return `${blobUrl}#toolbar=1&navpanes=0&scrollbar=1&view=${viewMode}`;
-  }, [blobUrl, viewMode]);
+    const cleanUrl = url.split("#")[0];
+
+    return `${cleanUrl}#toolbar=1&navpanes=0&scrollbar=1&view=${viewMode}`;
+  }, [url, viewMode, reloadKey]);
 
   function fitPage() {
     setViewMode("Fit");
+    setReloadKey((n) => n + 1);
   }
 
   function fitWidth() {
     setViewMode("FitH");
+    setReloadKey((n) => n + 1);
   }
 
   function fitHeight() {
     setViewMode("FitV");
+    setReloadKey((n) => n + 1);
   }
 
   function reloadPdf() {
-    if (blobUrl) {
-      URL.revokeObjectURL(blobUrl);
-    }
-
-    setBlobUrl("");
     setReloadKey((n) => n + 1);
   }
 
@@ -630,50 +558,22 @@ function PdfIframeProtected({ url, fullscreen = false }) {
           </button>
         </div>
 
-        <div className="flex-1 text-right text-[10px] text-zinc-400 pr-2 min-w-[220px]">
-          File PDF dibuka sebagai Blob lokal sementara
+        <div className="flex-1 text-right text-[10px] text-zinc-400 pr-2 min-w-[180px]">
+          Mode tampilan: {viewMode}
         </div>
       </div>
 
-      <div className="absolute left-0 right-0 bottom-0 top-[64px] bg-white">
-        {blobLoading && (
-          <div className="w-full h-full flex items-center justify-center text-[var(--text-light)]">
-            Mengambil file PDF ke memori aplikasi...
-          </div>
-        )}
-
-        {!blobLoading && blobError && (
-          <div className="w-full h-full flex flex-col items-center justify-center text-center p-6">
-            <div className="text-red-600 font-black">
-              PDF gagal dimuat
-            </div>
-
-            <div className="text-xs text-zinc-500 mt-2 max-w-md">
-              {blobError}
-            </div>
-
-            <button
-              onClick={reloadPdf}
-              className="mt-4 px-4 py-3 rounded-xl bg-[var(--green-mid)] text-white font-black text-sm"
-            >
-              Coba Muat Ulang
-            </button>
-          </div>
-        )}
-
-        {!blobLoading && !blobError && viewerUrl && (
-          <iframe
-            src={viewerUrl}
-            title="PDF Offline Blob"
-            className="w-full h-full border-0 bg-white"
-          />
-        )}
-      </div>
+      <iframe
+        key={reloadKey}
+        src={viewerUrl}
+        title="PDF Offline"
+        className="absolute left-0 right-0 bottom-0 top-[64px] w-full border-0 bg-white"
+      />
 
       {fullscreen && (
         <div className="absolute bottom-3 left-3 right-3 z-30 pointer-events-none">
           <div className="bg-black/60 text-white text-[11px] rounded-xl px-3 py-2 text-center">
-            PDF dibuka dari file sementara di memori aplikasi, bukan dari link langsung.
+            Jika dibuka dari APK, PDF seharusnya dibuka oleh Native Android Viewer.
           </div>
         </div>
       )}
