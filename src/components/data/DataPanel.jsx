@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Maximize2, X } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
-import { getWajibPajak } from "../../services/db";
+import { supabase } from "../../services/supabase";
 import { formatRp } from "../../utils/format";
 
 export default function DataPanel() {
@@ -18,15 +18,44 @@ export default function DataPanel() {
   async function loadData(kodeBlok = null) {
     setLoading(true);
 
-    const data = await getWajibPajak(
-      kodeBlok && kodeBlok !== "semua" ? kodeBlok : null
-    );
+    try {
+      const pageSize = 1000;
+      let from = 0;
+      let allRows = [];
 
-    setDataWp(data);
-    setLoading(false);
+      while (true) {
+        let request = supabase
+          .from("wajib_pajak")
+          .select("*")
+          .range(from, from + pageSize - 1);
 
-    if (!data.length) {
-      setToast("Data WP belum tersedia untuk filter ini.");
+        if (kodeBlok && kodeBlok !== "semua") {
+          request = request.eq("kode_blok", kodeBlok);
+        }
+
+        const { data, error } = await request;
+
+        if (error) throw error;
+
+        const rows = data || [];
+        allRows = [...allRows, ...rows];
+
+        if (rows.length < pageSize) break;
+
+        from += pageSize;
+      }
+
+      setDataWp(allRows);
+
+      if (!allRows.length) {
+        setToast("Data WP belum tersedia untuk filter ini.");
+      }
+    } catch (err) {
+      console.error("LOAD DATA ERROR:", err);
+      setDataWp([]);
+      setToast("Gagal memuat data wajib pajak.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -69,6 +98,9 @@ export default function DataPanel() {
       if (block) {
         setSelectedBlock(block);
       }
+    } else {
+      await loadData(null);
+      return;
     }
 
     await loadData(kode);
@@ -121,9 +153,7 @@ export default function DataPanel() {
               <div className="flex flex-wrap gap-2 mt-3">
                 <Badge>Blok {item.kode_blok}</Badge>
 
-                <Badge gold>
-                  {formatRp(item.pajak)}
-                </Badge>
+                <Badge gold>{formatRp(item.pajak)}</Badge>
 
                 <Badge>
                   {Number(item.luas_tanah || 0).toLocaleString("id-ID")} m²
@@ -166,11 +196,13 @@ export default function DataPanel() {
       </div>
 
       <div className="grid grid-cols-3 gap-3 p-3 bg-white border-b border-[var(--cream-dark)]">
-        <Stat title="Total Data" value={filtered.length} />
+        <Stat title="Total Data" value={filtered.length.toLocaleString("id-ID")} />
+
         <Stat
           title="Luas Tanah"
           value={`${totalLuasTanah.toLocaleString("id-ID")} m²`}
         />
+
         <Stat title="Total Pajak" value={formatRp(totalPajak)} />
       </div>
 
@@ -235,12 +267,10 @@ export default function DataPanel() {
         <div className="fixed inset-0 z-[9999] bg-[var(--cream)] flex flex-col">
           <div className="h-14 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-4">
             <div className="text-white">
-              <div className="font-black text-sm">
-                Data Wajib Pajak
-              </div>
+              <div className="font-black text-sm">Data Wajib Pajak</div>
 
               <div className="text-xs text-zinc-400">
-                Mode Fullscreen — {filtered.length} data
+                Mode Fullscreen — {filtered.length.toLocaleString("id-ID")} data
               </div>
             </div>
 
@@ -266,11 +296,13 @@ export default function DataPanel() {
           </div>
 
           <div className="grid grid-cols-3 gap-3 p-3 bg-white border-b border-[var(--cream-dark)]">
-            <Stat title="Total Data" value={filtered.length} />
+            <Stat title="Total Data" value={filtered.length.toLocaleString("id-ID")} />
+
             <Stat
               title="Luas Tanah"
               value={`${totalLuasTanah.toLocaleString("id-ID")} m²`}
             />
+
             <Stat title="Total Pajak" value={formatRp(totalPajak)} />
           </div>
 
@@ -280,12 +312,7 @@ export default function DataPanel() {
         </div>
       )}
 
-      {detail && (
-        <DetailModal
-          item={detail}
-          onClose={() => setDetail(null)}
-        />
-      )}
+      {detail && <DetailModal item={detail} onClose={() => setDetail(null)} />}
     </section>
   );
 }
@@ -362,17 +389,11 @@ function DetailModal({ item, onClose }) {
         <div className="mt-5 p-4 rounded-2xl bg-[var(--cream)] flex items-center gap-3">
           <span
             className={`w-3 h-3 rounded-full ${
-              item.status_bayar === "lunas"
-                ? "bg-green-500"
-                : "bg-red-500"
+              item.status_bayar === "lunas" ? "bg-green-500" : "bg-red-500"
             }`}
           />
 
-          <b>
-            {item.status_bayar === "lunas"
-              ? "LUNAS"
-              : "BELUM BAYAR"}
-          </b>
+          <b>{item.status_bayar === "lunas" ? "LUNAS" : "BELUM BAYAR"}</b>
 
           <span className="ml-auto text-xs text-[var(--text-light)]">
             Tahun {item.tahun}

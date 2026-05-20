@@ -101,8 +101,6 @@ export default function PdfPanel() {
   async function openFullscreenPdf() {
     const url = await loadSignedPdfUrl(block);
 
-    alert(window.AndroidPdf ? "AndroidPdf ADA" : "AndroidPdf TIDAK ADA");
-
     if (!url) {
       alert("URL PDF gagal dibuat.");
       return;
@@ -299,7 +297,7 @@ export default function PdfPanel() {
 
               <p className="text-xs text-[var(--text-light)] mt-3 text-center flex items-center justify-center gap-1">
                 <Search size={13} />
-                Di APK, tombol Fullscreen PDF akan mencoba membuka Native PDF Viewer.
+                Di APK, tombol Fullscreen PDF membuka Native PDF Viewer tanpa popup.
               </p>
             </div>
           ) : (
@@ -665,7 +663,7 @@ function Stat({ title, value }) {
       </div>
 
       <div className="text-sm sm:text-lg font-black text-[var(--text-dark)] mt-1">
-        {value}
+        {typeof value === "number" ? value.toLocaleString("id-ID") : value}
       </div>
     </div>
   );
